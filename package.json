@@ -1,13 +1,16 @@
 {
-  "name": "eslint-plugin-crescware-array-callback-arg-names",
+  "name": "@crescware/eslint-plugin-crescware-array-callback-arg-names",
   "version": "0.0.0",
-  "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./dist/index.js"
   },
   "scripts": {
+    "build": "rimraf dist && tsgo -p tsconfig.build.json",
     "check": "pnpm run check:types && pnpm run check:lint && pnpm run check:knip && pnpm run test",
     "check:knip": "knip",
     "check:lint": "oxlint && oxfmt --check",
@@ -22,6 +25,7 @@
     "knip": "6.7.0",
     "oxfmt": "0.47.0",
     "oxlint": "1.62.0",
+    "rimraf": "6.1.3",
     "vitest": "4.1.5"
   },
   "packageManager": "pnpm@10.33.2"
