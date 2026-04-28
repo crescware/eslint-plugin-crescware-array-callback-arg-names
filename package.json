@@ -1,17 +1,23 @@
 {
-  "name": "template",
+  "name": "eslint-plugin-crescware-array-callback-arg-names",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "check": "pnpm run check:types && pnpm run check:lint && pnpm run check:knip && pnpm run test",
     "check:knip": "knip",
     "check:lint": "oxlint && oxfmt --check",
     "check:types": "tsgo -p tsconfig.json --noEmit",
+    "exec:fixtures": "oxlint -c fixtures/oxlintrc.fixtures.json --no-ignore -f json fixtures/",
     "format": "oxlint --fix && oxfmt",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "24.12.2",
     "@typescript/native-preview": "7.0.0-dev.20260422.1",
     "knip": "6.7.0",
     "oxfmt": "0.47.0",

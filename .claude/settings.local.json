@@ -3,7 +3,8 @@
     "allow": [
       "Bash(corepack enable *)",
       "Bash(corepack prepare *)",
-      "Bash(mise exec *)"
+      "Bash(mise exec *)",
+      "WebFetch(domain:oxc.rs)"
     ]
   }
 }
