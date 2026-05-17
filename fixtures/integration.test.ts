@@ -64,6 +64,11 @@ describe("OK fixtures produce no false positives", () => {
     "ok-for-in.ts",
     "ok-for-destructure.ts",
     "ok-for-meaningful.ts",
+    "ok-discard-callback.ts",
+    "ok-discard-second.ts",
+    "ok-discard-reduce-v.ts",
+    "ok-discard-for-of.ts",
+    "ok-discard-for-destructure.ts",
   ])("%s", (file) => {
     expect(messagesFor(file)).toEqual([]);
   });
@@ -195,6 +200,30 @@ describe("NG fixtures match exactly", () => {
   test("ng-mixed-for-in-map.ts (outer map becomes outer due to inner for-of)", () => {
     expect(messagesFor("ng-mixed-for-in-map.ts")).toEqual([
       "Avoid the single-character name 'r' on an outer Array.prototype.map callback; use a meaningful name with 2 or more characters.",
+    ]);
+  });
+
+  test("ng-discard-callback-referenced.ts ('_' referenced in body)", () => {
+    expect(messagesFor("ng-discard-callback-referenced.ts")).toEqual([
+      "Discard parameter '_' is referenced inside the body; rename it to a meaningful name.",
+    ]);
+  });
+
+  test("ng-discard-for-referenced.ts ('_' referenced in body)", () => {
+    expect(messagesFor("ng-discard-for-referenced.ts")).toEqual([
+      "Discard parameter '_' is referenced inside the body; rename it to a meaningful name.",
+    ]);
+  });
+
+  test("ng-discard-reduce-first-sync.ts ('_' not allowed at acc position)", () => {
+    expect(messagesFor("ng-discard-reduce-first-sync.ts")).toEqual([
+      "Array.prototype.reduce expects 'acc' for argument 1 (got: '_').",
+    ]);
+  });
+
+  test("ng-discard-reduce-first-async.ts ('_' not allowed at prev position)", () => {
+    expect(messagesFor("ng-discard-reduce-first-async.ts")).toEqual([
+      "Array.prototype.reduce expects 'prev' for argument 1 (got: '_').",
     ]);
   });
 });
