@@ -229,6 +229,142 @@ const forKindOf = (
   return "for";
 };
 
+const DISCARD_NAME = "_";
+
+const hasIdentifierUseIn = (root: unknown, name: string): boolean => {
+  if (root === null || root === undefined) {
+    return false;
+  }
+  if (typeof root !== "object") {
+    return false;
+  }
+  if (Array.isArray(root)) {
+    for (const item of root) {
+      if (hasIdentifierUseIn(item, name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const node = root as {
+    type?: string;
+    name?: string;
+    body?: unknown;
+    init?: unknown;
+    object?: unknown;
+    property?: unknown;
+    computed?: boolean;
+    key?: unknown;
+    value?: unknown;
+    test?: unknown;
+    update?: unknown;
+    left?: unknown;
+    right?: unknown;
+    superClass?: unknown;
+  };
+  const type = node.type;
+
+  if (type === "Identifier" && node.name === name) {
+    return true;
+  }
+
+  if (type === "VariableDeclarator") {
+    return hasIdentifierUseIn(node.init, name);
+  }
+  if (
+    type === "FunctionDeclaration" ||
+    type === "FunctionExpression" ||
+    type === "ArrowFunctionExpression"
+  ) {
+    return hasIdentifierUseIn(node.body, name);
+  }
+  if (type === "MemberExpression") {
+    if (hasIdentifierUseIn(node.object, name)) {
+      return true;
+    }
+    if (node.computed === true) {
+      return hasIdentifierUseIn(node.property, name);
+    }
+    return false;
+  }
+  if (type === "Property") {
+    if (node.computed === true && hasIdentifierUseIn(node.key, name)) {
+      return true;
+    }
+    return hasIdentifierUseIn(node.value, name);
+  }
+  if (type === "ForStatement") {
+    const init = node.init as { type?: string } | null | undefined;
+    if (
+      init !== null &&
+      init !== undefined &&
+      init.type !== "VariableDeclaration"
+    ) {
+      if (hasIdentifierUseIn(init, name)) {
+        return true;
+      }
+    }
+    if (hasIdentifierUseIn(node.test, name)) {
+      return true;
+    }
+    if (hasIdentifierUseIn(node.update, name)) {
+      return true;
+    }
+    return hasIdentifierUseIn(node.body, name);
+  }
+  if (type === "ForOfStatement" || type === "ForInStatement") {
+    const left = node.left as { type?: string } | null | undefined;
+    if (
+      left !== null &&
+      left !== undefined &&
+      left.type !== "VariableDeclaration"
+    ) {
+      if (hasIdentifierUseIn(left, name)) {
+        return true;
+      }
+    }
+    if (hasIdentifierUseIn(node.right, name)) {
+      return true;
+    }
+    return hasIdentifierUseIn(node.body, name);
+  }
+  if (type === "CatchClause") {
+    return hasIdentifierUseIn(node.body, name);
+  }
+  if (
+    type === "ImportSpecifier" ||
+    type === "ImportDefaultSpecifier" ||
+    type === "ImportNamespaceSpecifier" ||
+    type === "LabeledStatement" ||
+    type === "BreakStatement" ||
+    type === "ContinueStatement"
+  ) {
+    return hasIdentifierUseIn(node.body, name);
+  }
+  if (type === "ClassDeclaration" || type === "ClassExpression") {
+    if (hasIdentifierUseIn(node.superClass, name)) {
+      return true;
+    }
+    return hasIdentifierUseIn(node.body, name);
+  }
+
+  const indexed = node as Record<string, unknown>;
+  for (const key of Object.keys(indexed)) {
+    if (
+      key === "loc" ||
+      key === "range" ||
+      key === "parent" ||
+      key === "type"
+    ) {
+      continue;
+    }
+    if (hasIdentifierUseIn(indexed[key], name)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const outerDescriptorOf = (frame: IterationFrame): string => {
   if (frame.kind === "array-callback") {
     return `Array.prototype.${frame.methodName} callback`;
@@ -250,10 +386,22 @@ const rule: Rule = {
     const callbackToFrame = new WeakMap<object, ArrayCallbackFrame>();
     const forNodeToFrame = new WeakMap<object, ForFrame>();
 
+    const isReduceFirstPosition = (
+      frame: ArrayCallbackFrame,
+      paramIndex: number,
+    ): boolean => {
+      return (
+        paramIndex === 0 &&
+        (frame.methodKind === "reduce-sync" ||
+          frame.methodKind === "reduce-async")
+      );
+    };
+
     const reportInnerArrayCallback = (
       param: Identifier,
       frame: ArrayCallbackFrame,
       paramIndex: number,
+      body: unknown,
     ) => {
       const expected = expectedNamesFor(frame.methodKind)[paramIndex];
       if (expected === undefined) {
@@ -265,17 +413,44 @@ const rule: Rule = {
       if (param.name === expected) {
         return;
       }
+      if (
+        param.name === DISCARD_NAME &&
+        !isReduceFirstPosition(frame, paramIndex)
+      ) {
+        if (!hasIdentifierUseIn(body, DISCARD_NAME)) {
+          return;
+        }
+        context.report({
+          message: `Discard parameter '_' is referenced inside the body; rename it to a meaningful name.`,
+          node: param,
+        });
+        return;
+      }
       context.report({
         message: `Array.prototype.${frame.methodName} expects '${expected}' for argument ${paramIndex + 1} (got: '${param.name}').`,
         node: param,
       });
     };
 
-    const reportInnerFor = (param: Identifier, frame: ForFrame) => {
+    const reportInnerFor = (
+      param: Identifier,
+      frame: ForFrame,
+      body: unknown,
+    ) => {
       if (param.name.length >= 2) {
         return;
       }
       if (FOR_ALLOWED_INNER.has(param.name)) {
+        return;
+      }
+      if (param.name === DISCARD_NAME) {
+        if (!hasIdentifierUseIn(body, DISCARD_NAME)) {
+          return;
+        }
+        context.report({
+          message: `Discard parameter '_' is referenced inside the body; rename it to a meaningful name.`,
+          node: param,
+        });
         return;
       }
       context.report({
@@ -345,6 +520,7 @@ const rule: Rule = {
       const expected = expectedNamesFor(frame.methodKind);
       const params = node.params;
       const limit = Math.min(params.length, expected.length);
+      const body = (node as unknown as { body?: unknown }).body;
 
       for (let i = 0; i < limit; i++) {
         const param = params[i];
@@ -354,7 +530,7 @@ const rule: Rule = {
         if (frame.hasNested) {
           reportOuter(param, frame);
         } else {
-          reportInnerArrayCallback(param, frame, i);
+          reportInnerArrayCallback(param, frame, i, body);
         }
       }
     };
@@ -379,11 +555,12 @@ const rule: Rule = {
         return;
       }
       const params = collectForLoopVarIdentifiers(node);
+      const body = (node as unknown as { body?: unknown }).body;
       for (const param of params) {
         if (frame.hasNested) {
           reportOuter(param, frame);
         } else {
-          reportInnerFor(param, frame);
+          reportInnerFor(param, frame, body);
         }
       }
     };
